@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+option go_package = "./pkg/proto";
+
+package protoservice;
+
+service ImgAPI{
+    rpc Upload(UploadRequest) returns (UploadResponse);
+    rpc Download(DownloadRequest) returns (DownloadResponse);
+}
+
+message DownloadRequest {
+    string FileId =1;
+}
+
+message DownloadResponse {
+    bytes ImageData = 1;
+}
+
+message UploadRequest {
+    FileHeader Header = 1;
+    bytes ImageData = 2;
+}
+
+message UploadResponse{
+    string FileId =1; 
+}
+
+message FileHeader{
+    string Name =1;
+    int64 FileSize =2;
+}
