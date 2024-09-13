@@ -79,5 +79,6 @@ func (s *ImgAPI) Download(c context.Context, req *DownloadRequest) (*DownloadRes
 	headerResponse := metadata.Pairs("fileExtension", fileExtension,
 		"originalFileName", fileMetaData.OriginalFileName)
 	grpc.SetHeader(c, headerResponse)
+	return &DownloadResponse{ImageData: buf.Bytes()}, nil
 
 }

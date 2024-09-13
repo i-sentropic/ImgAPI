@@ -31,6 +31,23 @@ func main() {
 
 	fmt.Println(deets.FileId, header)
 
+	fileID := "66e46e52188265959abc16ab"
+	file, header := Download(c, fileID)
+	fileName = fileID + ".jpg"
+	// open input file
+	fi, err := os.Create(fileName)
+	if err != nil {
+		panic(err)
+	}
+	// close fi on exit and check for its returned error
+	defer func() {
+		if err := fi.Close(); err != nil {
+			panic(err)
+		}
+	}()
+	fileData := file.ImageData
+	fi.Write(fileData)
+
 }
 
 func Upload(client proto.ImgAPIClient, fileName string) (*proto.UploadResponse, metadata.MD) {
@@ -71,5 +88,22 @@ func Upload(client proto.ImgAPIClient, fileName string) (*proto.UploadResponse, 
 		log.Fatal(err)
 	}
 
+	return resp, header
+}
+
+func Download(client proto.ImgAPIClient, fileID string) (*proto.DownloadResponse, metadata.MD) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var header metadata.MD
+
+	resp, err := client.Download(ctx, &proto.DownloadRequest{
+		FileId: fileID,
+	},
+		grpc.Header(&header),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return resp, header
 }
