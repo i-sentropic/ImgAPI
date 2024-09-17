@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -51,6 +52,7 @@ func (s *ImgAPI) Upload(c context.Context, req *UploadRequest) (*UploadResponse,
 	fileSize := strconv.Itoa(response["fileSize"].(int))
 
 	headerResponse := metadata.Pairs(
+		"fileId", response["fileId"].(string),
 		"fileSize", fileSize,
 		"fileExtension", response["fileExtension"].(string),
 		"originalFileName", response["originalFileName"].(string),
@@ -65,16 +67,20 @@ func (s *ImgAPI) Upload(c context.Context, req *UploadRequest) (*UploadResponse,
 
 func (s *ImgAPI) Download(c context.Context, req *DownloadRequest) (*DownloadResponse, error) {
 	fileID := req.FileId
-	conv, format := src.CheckFileExtension(fileID)
-
 	buf, foundFile, err := src.GetFileFromDB(fileID)
 	if err != nil {
 		return &DownloadResponse{}, err
 	}
 
-	//convert to new image type
-	if conv {
-		buf = src.ConvertImage(buf, format)
+	md, ok := metadata.FromIncomingContext(c)
+	if ok {
+		key := strings.Join(md.Get("mime-type"), "")
+		formatString, ok := contentType[key]
+		if ok {
+			format := src.ImgMap[formatString]
+			fmt.Println(format)
+			buf = src.ConvertImage(buf, format)
+		}
 	}
 
 	fileType, _ := filetype.Match(buf.Bytes())
@@ -99,4 +105,12 @@ func (s *ImgAPI) Delete(c context.Context, req *DeleteRequest) (*DeleteResponse,
 	}
 	result := src.DeleteFileFomDB(bucket, deleteRequestData)
 	return &DeleteResponse{FileId: fileID, Success: result["success"].(bool)}, err
+}
+
+var contentType = map[string]string{
+	"image/jpeg": "jpg",
+	"image/bmp":  "bmp",
+	"image/png":  "png",
+	"image/tiff": "tif",
+	"image/gif":  "gif",
 }

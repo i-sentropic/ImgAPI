@@ -94,12 +94,7 @@ func transformImage() gin.HandlerFunc {
 			originalFileName := foundFile.Metadata.OriginalFileName
 			fileMetaData := &src.MetaDataFields{originalFileName, transformHistory, fileExt}
 
-			//if new file
 			fileName := time.Now().Format(time.RFC3339) + "_" + originalFileName
-
-			//if overwrite
-			//fileName := foundFile.FileName
-			//delete the image and overwrite
 
 			result, err = src.SaveToDB(&bodyBytes, fileMetaData, fileName)
 			if err != nil {

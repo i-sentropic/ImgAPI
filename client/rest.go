@@ -3,7 +3,6 @@ package client
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -159,15 +158,6 @@ func UploadMultipleFiles(url string, paramName string, filePaths []string) (APIR
 		return respData, err
 	}
 	return respData, err
-}
-
-func GenericGet(url string, fileRef string, fileExt string) error {
-	resp, err := http.Get(url + fileRef + fileExt)
-	if err != nil {
-		return err
-	}
-	fmt.Println(resp)
-	return nil
 }
 
 func generateResponseObject(resp *http.Response) (APIResponse, error) {

@@ -8,101 +8,65 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/h2non/filetype"
+	"github.com/i-sentropic/imgAPI/pkg/proto"
 	"github.com/i-sentropic/imgAPI/pkg/src"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-func TestAPIFetch(t *testing.T) {
-	fetchRequestData := src.FetchRequestData{
-		OriginalFileName: "badger-011",
-		Url:              "https://www.wildsheffield.com/wp-content/uploads/2018/09/wildlifetrusts_40678106689-e1537524864604-1050x750.jpg",
-	}
-	fetchImageRequest := src.FetchImageRequest{
-		Payload: []src.FetchRequestData{fetchRequestData},
-	}
-	data, err := json.Marshal(&fetchImageRequest)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fetchReqFileName := "FetchRequest.json"
-	err = os.WriteFile(fetchReqFileName, data, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
+const (
+	address = "localhost:8089"
+)
 
-	resp, err := Post("http://localhost:8080/fetch", fetchReqFileName)
+func newGRPCClientConnection() (*grpc.ClientConn, proto.ImgAPIClient) {
+	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("did not connect: %v", err)
 	}
-	fmt.Println(resp)
-	tests := []FileData{}
-	tests = append(tests, resp.Payload...)
+	c := proto.NewImgAPIClient(conn)
+	return conn, c
+}
 
-	//load the bytes from the downloaded file and compare to a get
+func TestGRPCDelete(t *testing.T) {
+	conn, c := newGRPCClientConnection()
+	defer conn.Close()
+
+	//upload file
+	originalFileExtension := "jpg"
+	originalFileName := "badger-004"
+	_, header := Upload(c, fmt.Sprintf("%v.%v", originalFileName, originalFileExtension))
+
+	//compile struct for request to delete files sent to server, starting with a file not held on the db
+	filename := "thisfiledoesntexist"
+	tests := []struct {
+		FileId   string
+		Expected bool
+	}{
+		{
+			FileId:   filename,
+			Expected: false,
+		},
+		{
+			FileId:   strings.Join(header.Get("fileid"), ""),
+			Expected: true,
+		},
+	}
 	for _, test := range tests {
-		t.Run("Test file equality", func(t *testing.T) {
-			resp, err := http.Get(fetchRequestData.Url)
-			if err != nil {
-				log.Fatal("Unable to down file from url")
+		t.Run(fmt.Sprintf("Test %v", test.FileId), func(t *testing.T) {
+			resp := Delete(c, test.FileId)
+			if resp.Success != test.Expected {
+				t.Errorf("Expected: %v, Got: %v", test.Expected, resp.Success)
 			}
-			bodyBytes, err := io.ReadAll(resp.Body)
-			defer resp.Body.Close()
-
-			err = GetFile("http://localhost:8080/download/", test.FileId)
-			if err != nil {
-				t.Errorf("unable to download file %v (%v) from server", test.FileId, test.OriginalFileName)
-			}
-
-			fileName := fmt.Sprintf("%v.%v", test.FileId, test.FileExtension)
-			bodyBytes2, err := os.ReadFile(fileName)
-			if err != nil {
-				log.Fatal("unable to open file after")
-			}
-
-			if !bytes.Equal(bodyBytes, bodyBytes2) {
-				t.Errorf("file downloaded from server and file from API not equal")
-			}
-			os.Remove(fmt.Sprintf("%v.%v", test.FileId, test.FileExtension))
 		})
 	}
-	os.Remove(fetchReqFileName)
 
 }
 
-func TestAPIUploadDownload(t *testing.T) {
-	//compile test cases
-	tests := []FileData{}
-	resp, err := UploadFile("http://localhost:8080/upload", "image", "badger-004.jpg")
-	if err != nil {
-		log.Fatal(err)
-	}
-	tests = append(tests, resp.Payload...)
-	resp, err = UploadMultipleFiles("http://localhost:8080/upload", "image", []string{"badger-001.jpg", "badger-002.jpg", "badger-003.jpg"})
-	if err != nil {
-		log.Fatal(err)
-	}
-	tests = append(tests, resp.Payload...)
-
-	//fetch from server and assert the same as the file loaded
-	for _, test := range tests {
-		t.Run(fmt.Sprintf("Test %v.%v equal to %v.%v", test.OriginalFileName, test.FileExtension, test.FileId, test.FileExtension), func(t *testing.T) {
-			err := GetFile("http://localhost:8080/download/", test.FileId)
-			if err != nil {
-				t.Errorf("unable to download file %v (%v) from server", test.FileId, test.OriginalFileName)
-			}
-			f1 := fmt.Sprintf("%v.%v", test.FileId, test.FileExtension)
-			f2 := fmt.Sprintf("%v.%v", test.OriginalFileName, test.FileExtension)
-			if !filesEqual(f1, f2) {
-				t.Errorf("files not equal")
-			}
-			os.Remove(fmt.Sprintf("%v.%v", test.FileId, test.FileExtension))
-		})
-	}
-}
-
-func TestDelete(t *testing.T) {
+func TestRESTDelete(t *testing.T) {
 	resp, err := UploadMultipleFiles("http://localhost:8080/upload", "image", []string{"badger-001.jpg", "badger-002.jpg", "badger-003.jpg"})
 	if err != nil {
 		log.Fatal(err)
@@ -167,7 +131,173 @@ func TestDelete(t *testing.T) {
 
 }
 
-func TestChangeFileFormat(t *testing.T) {
+func TestGRPCChangeFileFormat(t *testing.T) {
+	conn, c := newGRPCClientConnection()
+	defer conn.Close()
+
+	//upload file
+	originalFileExtension := "jpg"
+	originalFileName := "badger-004"
+	_, header := Upload(c, fmt.Sprintf("%v.%v", originalFileName, originalFileExtension))
+
+	tests := []struct {
+		FileExtension string
+		Expected      string
+	}{
+		{"fhfh", originalFileExtension},
+		{"jpg", "jpg"},
+		{"jpeg", "jpg"},
+		{"tif", "tif"},
+		{"tiff", "tif"},
+		{"bmp", "bmp"},
+		{"png", "png"},
+		{"gif", "gif"},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("Test file type: %v against expected: %v", test.FileExtension, test.Expected), func(t *testing.T) {
+			//download file
+			fileId := strings.Join(header.Get("fileid"), "")
+			requestFile := fmt.Sprintf("%v.%v", fileId, test.FileExtension)
+			file, _ := Download(c, requestFile, test.FileExtension)
+
+			//read bytes from response
+			respBytes := file.ImageData
+
+			//get file extension
+			fileType, _ := filetype.Match(respBytes)
+			if fileType.Extension != test.Expected {
+				t.Errorf(fmt.Sprintf("Expected: %v, Got: %v", test.Expected, fileType.Extension))
+			}
+		})
+	}
+}
+
+func TestGRPCUploadDownload(t *testing.T) {
+	conn, c := newGRPCClientConnection()
+	defer conn.Close()
+
+	//upload file
+	fileName := "badger-001.jpg"
+	_, header := Upload(c, fileName)
+
+	//download file
+	fileId := strings.Join(header.Get("fileid"), "")
+	file, header := Download(c, fileId, "")
+
+	//read bytes from response
+	respBytes := file.ImageData
+
+	//read bytes from original file stored locally
+	originalFileName := strings.Join(header.Get("originalfilename"), "")
+	fileExtension := strings.Join(header.Get("fileextension"), "")
+	fileName = fmt.Sprintf("%v.%v", originalFileName, fileExtension)
+
+	fileBytes, err := os.ReadFile(fileName)
+	if err != nil {
+		t.Errorf("unable to open response from server")
+	}
+
+	if !bytes.Equal(respBytes, fileBytes) {
+		ft1, _ := filetype.Match(respBytes)
+		ft2, _ := filetype.Match(fileBytes)
+		fmt.Println(ft1.Extension, ft2.Extension)
+		t.Errorf("files not the same")
+
+	}
+}
+
+func TestRESTUploadDownload(t *testing.T) {
+	//compile test cases
+	tests := []FileData{}
+	resp, err := UploadFile("http://localhost:8080/upload", "image", "badger-004.jpg")
+	if err != nil {
+		log.Fatal(err)
+	}
+	tests = append(tests, resp.Payload...)
+	resp, err = UploadMultipleFiles("http://localhost:8080/upload", "image", []string{"badger-001.jpg", "badger-002.jpg", "badger-003.jpg"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	tests = append(tests, resp.Payload...)
+
+	//fetch from server and assert the same as the file loaded
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("Test %v.%v equal to %v.%v", test.OriginalFileName, test.FileExtension, test.FileId, test.FileExtension), func(t *testing.T) {
+			err := GetFile("http://localhost:8080/download/", test.FileId)
+			if err != nil {
+				t.Errorf("unable to download file %v (%v) from server", test.FileId, test.OriginalFileName)
+			}
+			f1 := fmt.Sprintf("%v.%v", test.FileId, test.FileExtension)
+			f2 := fmt.Sprintf("%v.%v", test.OriginalFileName, test.FileExtension)
+			if !filesEqual(f1, f2) {
+				t.Errorf("files not equal")
+			}
+			os.Remove(fmt.Sprintf("%v.%v", test.FileId, test.FileExtension))
+		})
+	}
+}
+
+func TestRESTFetch(t *testing.T) {
+	fetchRequestData := src.FetchRequestData{
+		OriginalFileName: "badger-011",
+		Url:              "https://www.wildsheffield.com/wp-content/uploads/2018/09/wildlifetrusts_40678106689-e1537524864604-1050x750.jpg",
+	}
+	fetchImageRequest := src.FetchImageRequest{
+		Payload: []src.FetchRequestData{fetchRequestData},
+	}
+	data, err := json.Marshal(&fetchImageRequest)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fetchReqFileName := "FetchRequest.json"
+	err = os.WriteFile(fetchReqFileName, data, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	resp, err := Post("http://localhost:8080/fetch", fetchReqFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	tests := []FileData{}
+	tests = append(tests, resp.Payload...)
+
+	//load the bytes from the downloaded file and compare to a get
+	for _, test := range tests {
+		t.Run("Test file equality", func(t *testing.T) {
+			resp, err := http.Get(fetchRequestData.Url)
+			if err != nil {
+				log.Fatal("Unable to down file from url")
+			}
+			bodyBytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Errorf("unable to read body bytes")
+			}
+			defer resp.Body.Close()
+
+			err = GetFile("http://localhost:8080/download/", test.FileId)
+			if err != nil {
+				t.Errorf("unable to download file %v (%v) from server", test.FileId, test.OriginalFileName)
+			}
+
+			fileName := fmt.Sprintf("%v.%v", test.FileId, test.FileExtension)
+			bodyBytes2, err := os.ReadFile(fileName)
+			if err != nil {
+				log.Fatal("unable to open file after")
+			}
+
+			if !bytes.Equal(bodyBytes, bodyBytes2) {
+				t.Errorf("file downloaded from server and file from REST not equal")
+			}
+			os.Remove(fmt.Sprintf("%v.%v", test.FileId, test.FileExtension))
+		})
+	}
+	os.Remove(fetchReqFileName)
+
+}
+
+func TestRESTChangeFileFormat(t *testing.T) {
 	originalFileExtension := "jpg"
 	originalFileName := "badger-004"
 	requestFile := fmt.Sprintf("%v.%v", originalFileName, originalFileExtension)
