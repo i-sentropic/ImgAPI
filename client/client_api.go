@@ -29,35 +29,7 @@ type FileData struct {
 type APIHeaderResponse struct {
 }
 
-// func main() {
-// 	//UploadFile("http://localhost:8080/upload", "image", "badger-004.jpg")
-// 	//UploadMultipleFiles("http://localhost:8080/upload", "image", []string{"badger-001.jpg", "badger-002.jpg", "badger-003.jpg"})
-// 	// GetFile("http://localhost:8080/download/", "66e2ddc8f754d67716625e31")
-// 	// GenericPost("http://localhost:8080/fetch", "fetchImageRequest.json")
-// 	GenericPost("http://localhost:8080/transform", "transformImageRequest.json")
-// 	//GenericPost("http://localhost:8080/delete", "deleteImageRequest.json")
-// }
-
-func GenericGet(url string, fileRef string, fileExt string) error {
-	resp, err := http.Get(url + fileRef + fileExt)
-	if err != nil {
-		return err
-	}
-	fmt.Println(resp)
-	return nil
-}
-
-func generateResponseObject(resp *http.Response) (APIResponse, error) {
-	respData := &APIResponse{}
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return APIResponse{}, err
-	}
-	json.Unmarshal(bodyBytes, respData)
-	return *respData, nil
-}
-
-func GenericPost(url string, fileRef string) (APIResponse, error) {
+func Post(url string, fileRef string) (APIResponse, error) {
 	jsonbytes, err := os.ReadFile(fileRef)
 	if err != nil {
 		return APIResponse{}, err
@@ -122,11 +94,17 @@ func UploadFile(url string, paramName string, filePath string) (APIResponse, err
 		return APIResponse{}, err
 	}
 	_, err = io.Copy(part, file)
+	if err != nil {
+		return APIResponse{}, err
+	}
 	err = writer.Close()
 	if err != nil {
 		return APIResponse{}, err
 	}
 	request, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return APIResponse{}, err
+	}
 	request.Header.Add("Content-Type", writer.FormDataContentType())
 	client := &http.Client{}
 	resp, err := client.Do(request)
@@ -165,6 +143,9 @@ func UploadMultipleFiles(url string, paramName string, filePaths []string) (APIR
 		return APIResponse{}, err
 	}
 	request, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return APIResponse{}, err
+	}
 	request.Header.Add("Content-Type", writer.FormDataContentType())
 	client := &http.Client{}
 	resp, err := client.Do(request)
@@ -178,4 +159,23 @@ func UploadMultipleFiles(url string, paramName string, filePaths []string) (APIR
 		return respData, err
 	}
 	return respData, err
+}
+
+func GenericGet(url string, fileRef string, fileExt string) error {
+	resp, err := http.Get(url + fileRef + fileExt)
+	if err != nil {
+		return err
+	}
+	fmt.Println(resp)
+	return nil
+}
+
+func generateResponseObject(resp *http.Response) (APIResponse, error) {
+	respData := &APIResponse{}
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return APIResponse{}, err
+	}
+	json.Unmarshal(bodyBytes, respData)
+	return *respData, nil
 }

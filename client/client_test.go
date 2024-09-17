@@ -2,14 +2,73 @@ package client
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"testing"
 
 	"github.com/h2non/filetype"
 	"github.com/i-sentropic/imgAPI/pkg/src"
 )
+
+func TestAPIFetch(t *testing.T) {
+	fetchRequestData := src.FetchRequestData{
+		OriginalFileName: "badger-011",
+		Url:              "https://www.wildsheffield.com/wp-content/uploads/2018/09/wildlifetrusts_40678106689-e1537524864604-1050x750.jpg",
+	}
+	fetchImageRequest := src.FetchImageRequest{
+		Payload: []src.FetchRequestData{fetchRequestData},
+	}
+	data, err := json.Marshal(&fetchImageRequest)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fetchReqFileName := "FetchRequest.json"
+	err = os.WriteFile(fetchReqFileName, data, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	resp, err := Post("http://localhost:8080/fetch", fetchReqFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(resp)
+	tests := []FileData{}
+	tests = append(tests, resp.Payload...)
+
+	//load the bytes from the downloaded file and compare to a get
+	for _, test := range tests {
+		t.Run("Test file equality", func(t *testing.T) {
+			resp, err := http.Get(fetchRequestData.Url)
+			if err != nil {
+				log.Fatal("Unable to down file from url")
+			}
+			bodyBytes, err := io.ReadAll(resp.Body)
+			defer resp.Body.Close()
+
+			err = GetFile("http://localhost:8080/download/", test.FileId)
+			if err != nil {
+				t.Errorf("unable to download file %v (%v) from server", test.FileId, test.OriginalFileName)
+			}
+
+			fileName := fmt.Sprintf("%v.%v", test.FileId, test.FileExtension)
+			bodyBytes2, err := os.ReadFile(fileName)
+			if err != nil {
+				log.Fatal("unable to open file after")
+			}
+
+			if !bytes.Equal(bodyBytes, bodyBytes2) {
+				t.Errorf("file downloaded from server and file from API not equal")
+			}
+			os.Remove(fmt.Sprintf("%v.%v", test.FileId, test.FileExtension))
+		})
+	}
+
+}
 
 func TestAPIUploadDownload(t *testing.T) {
 	//compile test cases
@@ -37,6 +96,7 @@ func TestAPIUploadDownload(t *testing.T) {
 			if !filesEqual(f1, f2) {
 				t.Errorf("files not equal")
 			}
+			os.Remove(fmt.Sprintf("%v.%v", test.FileId, test.FileExtension))
 		})
 	}
 }
@@ -73,7 +133,36 @@ func TestDelete(t *testing.T) {
 	}
 
 	//generate delete request struct and marshal to JSON, save and then send as a request
-	
+	deleteReq := src.DeleteImageRequest{
+		Payload: deleteRequestData,
+	}
+	bytes, err := json.Marshal(&deleteReq)
+	if err != nil {
+		log.Fatal(err)
+	}
+	deleteReqFileName := "DeleteRequest.json"
+	err = os.WriteFile(deleteReqFileName, bytes, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//send delete request
+	resp, err = Post("http://localhost:8080/delete", deleteReqFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for idx, test := range tests {
+		response := resp.Payload
+		t.Run(fmt.Sprintf("Test %v", test.FileId), func(t *testing.T) {
+			if response[idx].FileId != test.FileId {
+				t.Errorf("Expected filename: %v, got: %v", test.FileId, response[idx].FileId)
+			}
+			if response[idx].Success != test.Expected {
+				t.Errorf("Expected: %v, got %v", test.Expected, response[idx].Success)
+			}
+		})
+	}
+	os.Remove(deleteReqFileName)
 
 }
 
