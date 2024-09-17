@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ImgAPI_Upload_FullMethodName   = "/protoservice.ImgAPI/Upload"
 	ImgAPI_Download_FullMethodName = "/protoservice.ImgAPI/Download"
+	ImgAPI_Delete_FullMethodName   = "/protoservice.ImgAPI/Delete"
 )
 
 // ImgAPIClient is the client API for ImgAPI service.
@@ -29,6 +30,7 @@ const (
 type ImgAPIClient interface {
 	Upload(ctx context.Context, in *UploadRequest, opts ...grpc.CallOption) (*UploadResponse, error)
 	Download(ctx context.Context, in *DownloadRequest, opts ...grpc.CallOption) (*DownloadResponse, error)
+	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
 }
 
 type imgAPIClient struct {
@@ -59,12 +61,23 @@ func (c *imgAPIClient) Download(ctx context.Context, in *DownloadRequest, opts .
 	return out, nil
 }
 
+func (c *imgAPIClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteResponse)
+	err := c.cc.Invoke(ctx, ImgAPI_Delete_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ImgAPIServer is the server API for ImgAPI service.
 // All implementations must embed UnimplementedImgAPIServer
 // for forward compatibility.
 type ImgAPIServer interface {
 	Upload(context.Context, *UploadRequest) (*UploadResponse, error)
 	Download(context.Context, *DownloadRequest) (*DownloadResponse, error)
+	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
 	mustEmbedUnimplementedImgAPIServer()
 }
 
@@ -80,6 +93,9 @@ func (UnimplementedImgAPIServer) Upload(context.Context, *UploadRequest) (*Uploa
 }
 func (UnimplementedImgAPIServer) Download(context.Context, *DownloadRequest) (*DownloadResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Download not implemented")
+}
+func (UnimplementedImgAPIServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
 }
 func (UnimplementedImgAPIServer) mustEmbedUnimplementedImgAPIServer() {}
 func (UnimplementedImgAPIServer) testEmbeddedByValue()                {}
@@ -138,6 +154,24 @@ func _ImgAPI_Download_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ImgAPI_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ImgAPIServer).Delete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ImgAPI_Delete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ImgAPIServer).Delete(ctx, req.(*DeleteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ImgAPI_ServiceDesc is the grpc.ServiceDesc for ImgAPI service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -152,6 +186,10 @@ var ImgAPI_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Download",
 			Handler:    _ImgAPI_Download_Handler,
+		},
+		{
+			MethodName: "Delete",
+			Handler:    _ImgAPI_Delete_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

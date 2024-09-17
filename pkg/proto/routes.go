@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/h2non/filetype"
+	"github.com/i-sentropic/imgAPI/pkg/db"
 	"github.com/i-sentropic/imgAPI/pkg/src"
+	"go.mongodb.org/mongo-driver/mongo/gridfs"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -47,9 +50,11 @@ func (s *ImgAPI) Upload(c context.Context, req *UploadRequest) (*UploadResponse,
 
 	fileSize := strconv.Itoa(response["fileSize"].(int))
 
-	headerResponse := metadata.Pairs("fileSize", fileSize,
+	headerResponse := metadata.Pairs(
+		"fileSize", fileSize,
 		"fileExtension", response["fileExtension"].(string),
 		"originalFileName", response["originalFileName"].(string),
+		"transformHistory", strings.Join(response["transformHistory"].([]string), " | "),
 	)
 	grpc.SetHeader(c, headerResponse)
 
@@ -73,12 +78,25 @@ func (s *ImgAPI) Download(c context.Context, req *DownloadRequest) (*DownloadRes
 	}
 
 	fileType, _ := filetype.Match(buf.Bytes())
-	fileExtension := fileType.Extension
-	fileMetaData := foundFile.Metadata
 
-	headerResponse := metadata.Pairs("fileExtension", fileExtension,
-		"originalFileName", fileMetaData.OriginalFileName)
+	headerResponse := metadata.Pairs(
+		"fileExtension", fileType.Extension,
+		"originalFileName", foundFile.Metadata.OriginalFileName,
+		"transformHistory", strings.Join(foundFile.Metadata.TransformHistory, " | "),
+	)
 	grpc.SetHeader(c, headerResponse)
 	return &DownloadResponse{ImageData: buf.Bytes()}, nil
 
+}
+
+func (s *ImgAPI) Delete(c context.Context, req *DeleteRequest) (*DeleteResponse, error) {
+	fileID := req.FileId
+	deleteRequestData := src.DeleteRequestData{FileID: fileID}
+
+	bucket, err := gridfs.NewBucket(db.DB.Database("ImgAPI"), db.Opt)
+	if err != nil {
+		return &DeleteResponse{FileId: fileID, Success: false}, err
+	}
+	result := src.DeleteFileFomDB(bucket, deleteRequestData)
+	return &DeleteResponse{FileId: fileID, Success: result["success"].(bool)}, err
 }

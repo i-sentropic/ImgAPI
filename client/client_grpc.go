@@ -1,8 +1,7 @@
-package main
+package client
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"github.com/i-sentropic/imgAPI/pkg/proto"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -19,36 +17,41 @@ const (
 	address = "localhost:8089"
 )
 
-func main() {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Fatalf("did not connect: %v", err)
-	}
-	defer conn.Close()
-	c := proto.NewImgAPIClient(conn)
-	fileName := "badger-001.jpg"
-	deets, header := Upload(c, fileName)
+// func main() {
+// 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// 	if err != nil {
+// 		log.Fatalf("did not connect: %v", err)
+// 	}
+// 	defer conn.Close()
+// 	c := proto.NewImgAPIClient(conn)
+// 	fileName := "badger-001.jpg"
+// 	deets, header := Upload(c, fileName)
 
-	fmt.Println(deets.FileId, header)
+// 	fmt.Println(deets.FileId, header)
 
-	fileID := "66e46e52188265959abc16ab"
-	file, header := Download(c, fileID)
-	fileName = fileID + ".jpg"
-	// open input file
-	fi, err := os.Create(fileName)
-	if err != nil {
-		panic(err)
-	}
-	// close fi on exit and check for its returned error
-	defer func() {
-		if err := fi.Close(); err != nil {
-			panic(err)
-		}
-	}()
-	fileData := file.ImageData
-	fi.Write(fileData)
+// 	fileID := "66e94a9b39115792a34b0c9a.gif"
+// 	file, header := Download(c, fileID)
+// 	fileName = "test"
+// 	// open input file
+// 	fi, err := os.Create(fileName)
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	// close fi on exit and check for its returned error
+// 	defer func() {
+// 		if err := fi.Close(); err != nil {
+// 			panic(err)
+// 		}
+// 	}()
 
-}
+// 	fileType, _ := filetype.Match(file.ImageData)
+// 	fmt.Println(fileType.Extension, header)
+
+// 	fi.Write(file.ImageData)
+
+// 	res := Delete(c, "66e94aa739115792a34b0c9c")
+// 	fmt.Println(res)
+// }
 
 func Upload(client proto.ImgAPIClient, fileName string) (*proto.UploadResponse, metadata.MD) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -65,8 +68,6 @@ func Upload(client proto.ImgAPIClient, fileName string) (*proto.UploadResponse, 
 		log.Fatal(err)
 	}
 	size := stat.Size()
-
-	log.Printf("[Upload] Will send file %q with size %d\n", fh.Name(), size)
 
 	data, err := io.ReadAll(fh)
 	if err != nil {
@@ -106,4 +107,14 @@ func Download(client proto.ImgAPIClient, fileID string) (*proto.DownloadResponse
 		log.Fatal(err)
 	}
 	return resp, header
+}
+
+func Delete(client proto.ImgAPIClient, fileID string) *proto.DeleteResponse {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	resp, err := client.Delete(ctx, &proto.DeleteRequest{FileId: fileID})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return resp
 }
