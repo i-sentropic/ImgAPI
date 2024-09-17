@@ -67,6 +67,7 @@ func TestAPIFetch(t *testing.T) {
 			os.Remove(fmt.Sprintf("%v.%v", test.FileId, test.FileExtension))
 		})
 	}
+	os.Remove(fetchReqFileName)
 
 }
 
