@@ -9,4 +9,4 @@ There are 4 packages:
 4. src - image transformation, db operations and structs for JSON unmarshaling
 
 ## Testing
-Testing is done through a series of gRPC client requests and http client requests. 
+Testing is done through a series of gRPC client requests and http client requests located in the client directory. 
